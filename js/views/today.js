@@ -61,6 +61,16 @@
       days.length ? dayList : UI.emptyState('dumbbell', 'В программе нет дней', 'Добавьте дни и упражнения на вкладке «Программа».', [h('a', { class: 'btn primary', href: '#/program' }, 'Открыть программу')]),
       days.length ? h('button', { type: 'button', class: 'btn primary xl block', id: 'start-btn', onClick: start }, icon('play', { size: 20 }), 'Начать') : null);
     page.appendChild(startCard);
+    if (WD.pwa) page.appendChild(WD.pwa.installHint());
+
+    // ярлык приложения «Начать тренировку»: #/today?start=1 — продолжить черновик или начать следующий день
+    if (params.start) {
+      try { history.replaceState(null, '', location.pathname + location.search + '#/today'); } catch (e) { /* ignore */ }
+      setTimeout(function () {
+        if (draft) app.go('session/' + draft.id);
+        else if (days.length) start();
+      }, 0);
+    }
 
     function start() {
       var day = app.dayById(chosen);

@@ -37,6 +37,25 @@
       h('div', { class: 'live' }, icon('dumbbell', { size: 18 }), h('div', null, volEl, h('span', { class: 'live-lbl' }, 'объём, кг'))),
       h('div', { class: 'live' }, icon('check', { size: 18 }), h('div', null, setsEl, h('span', { class: 'live-lbl' }, 'подходов'))));
     page.appendChild(liveBar);
+    if (isDraft && WD.pwa && WD.pwa.wakeSupported()) page.appendChild(wakeRow());
+
+    function wakeRow() {
+      var P = WD.pwa;
+      var stateEl = h('span', { class: 'hint wake-state', id: 'wake-state' });
+      function upd() {
+        if (!stateEl.isConnected && off) { off(); return; }
+        stateEl.textContent = !st.settings.wakeLock ? 'экран погаснет как обычно' : P.wakeActive() ? 'включено — экран не погаснет' : 'браузер не разрешил — экран может погаснуть';
+      }
+      var off = P.onChange(upd);
+      var row = UI.toggle('Не гасить экран во время тренировки', st.settings.wakeLock, function (v) {
+        st.settings.wakeLock = v; app.save(); P.keepAwake(v).then(upd);
+      });
+      row.classList.add('wake-row');
+      row.id = 'wake-row';
+      row.querySelector('.toggle-label').appendChild(stateEl);
+      setTimeout(upd, 300);
+      return h('section', { class: 'card compact' }, row);
+    }
 
     function refresh() {
       var s = M.sessionStats(sess);
@@ -50,7 +69,12 @@
       if (isDraft && sess.startedAt) durEl.textContent = C.fmtClock((Date.now() - sess.startedAt) / 1000);
       else durEl.textContent = sess.durationSec ? C.fmtDuration(sess.durationSec) : '—';
     }
-    if (isDraft) { var tick = setInterval(updateDur, 1000); ctx.cleanup = function () { clearInterval(tick); app.saveNow(); }; }
+    if (isDraft) {
+      var tick = setInterval(updateDur, 1000);
+      var P = WD.pwa;
+      if (P && P.wakeSupported() && st.settings.wakeLock) P.keepAwake(true);
+      ctx.cleanup = function () { clearInterval(tick); if (P) P.keepAwake(false); app.saveNow(); };
+    }
     else ctx.cleanup = function () { app.saveNow(); };
 
     // ---- прошлый раз ----

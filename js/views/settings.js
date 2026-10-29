@@ -28,8 +28,14 @@
       UI.toggle('Запускать таймер автоматически', set.autoRest, function (v) { set.autoRest = v; app.save(); }, 'после отметки подхода'),
       UI.toggle('Вибрация в конце отдыха', set.vibrate, function (v) { set.vibrate = v; app.save(); }, 'если устройство поддерживает'),
       UI.toggle('Звуковой сигнал', set.beep, function (v) { set.beep = v; app.save(); if (v) WD.timer.beep(); }),
+      WD.pwa && WD.pwa.wakeSupported()
+        ? UI.toggle('Не гасить экран во время тренировки', set.wakeLock, function (v) { set.wakeLock = v; app.save(); }, 'Wake Lock: экран не погаснет, пока открыта тренировка')
+        : h('p', { class: 'hint' }, 'Удержание экрана включённым (Wake Lock) этот браузер не поддерживает.'),
       UI.field('Шаг кнопок − / + для веса', stepSel),
       h('button', { type: 'button', class: 'btn ghost sm', onClick: function () { WD.timer.unlockAudio(); WD.timer.start(set.restSeconds); } }, icon('play', { size: 16 }), 'Проверить таймер')));
+
+    // ---- приложение (PWA) ----
+    if (WD.pwa) page.appendChild(pwaCard());
 
     // ---- данные ----
     var fileIn = h('input', { type: 'file', accept: '.json,application/json', id: 'import-file', class: 'sr-only', onChange: function () {
@@ -69,10 +75,60 @@
     page.appendChild(h('section', { class: 'card about', 'aria-labelledby': 'ab-h' },
       h('div', { class: 'card-head' }, h('h2', { id: 'ab-h' }, icon('info', { size: 18 }), 'О приложении')),
       h('p', null, 'Дневник тренировок — офлайн-приложение без сервера: данные хранятся в localStorage этого браузера (ключ «' + S.KEY + '», формат v' + S.VERSION + ') и никуда не отправляются.'),
-      h('p', { class: 'muted small' }, 'Совет: на телефоне добавьте страницу на главный экран («Поделиться → На экран Домой» или меню браузера → «Установить приложение») — так она работает как приложение и без интернета.')));
+      h('p', { class: 'muted small' }, 'Версия приложения: ' + (WD.pwa && WD.pwa.version ? WD.pwa.version : 'без офлайн-кэша') + '.')));
 
     if (params.import) setTimeout(function () { var b = document.getElementById('import-btn'); if (b) { b.focus(); b.scrollIntoView({ block: 'center' }); } }, 50);
   };
+
+  function pwaCard() {
+    var P = WD.pwa, app = WD.app;
+    var card = h('section', { class: 'card pwa-card', 'aria-labelledby': 'pw-h', id: 'app-card' });
+    var persistInfo = { persisted: null, est: null };
+    function row(ic, title, text, extra) {
+      return h('div', { class: 'pwa-row' }, h('span', { class: 'pwa-ic', 'aria-hidden': 'true' }, icon(ic, { size: 18 })),
+        h('div', { class: 'grow' }, h('strong', null, title), text ? h('p', { class: 'muted small' }, text) : null), extra || null);
+    }
+    function draw() {
+      D.clear(card);
+      card.appendChild(h('div', { class: 'card-head' }, h('h2', { id: 'pw-h' }, icon('phone', { size: 18 }), 'Приложение')));
+      var mode = P.installMode();
+      if (mode === 'standalone') card.appendChild(row('check', 'Установлено', 'Дневник запущен как отдельное приложение.'));
+      else if (mode === 'prompt') card.appendChild(row('download', 'Установить на это устройство', 'Иконка на главном экране, отдельное окно, работа без интернета.',
+        h('button', { type: 'button', class: 'btn primary sm', id: 'install-btn', onClick: function () { P.promptInstall().then(function (r) { if (r === 'dismissed') UI.toast('Установку можно запустить здесь в любой момент'); }); } }, icon('download', { size: 16 }), 'Установить приложение')));
+      else if (mode === 'ios') card.appendChild(row('share', 'Установка на iPhone / iPad', P.iosSteps()));
+      else card.appendChild(row('squarePlus', P.installed ? 'Установлено' : 'Установка', P.installed ? 'Откройте «Дневник» с главного экрана или из списка приложений.' :
+        'Откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран». В Chrome и Edge на компьютере — значок установки в адресной строке.'));
+
+      var swText = { active: P.version ? 'Готов: приложение откроется и без интернета. Версия ' + P.version + '.' : 'Готовится…', pending: 'Готовится…',
+        unsupported: 'Этот браузер не поддерживает офлайн-режим (service worker).', file: 'Недоступен при открытии файла с диска — откройте сайт по http(s).',
+        disabled: 'Отключён для разработки (?nosw).', error: 'Не удалось включить офлайн-режим.' }[P.sw] || '';
+      card.appendChild(row(P.online ? 'wifi' : 'wifiOff', 'Офлайн-режим · сейчас ' + (P.online ? 'в сети' : 'без интернета'), swText,
+        P.reg ? h('button', { type: 'button', class: 'btn ghost sm', id: 'check-update', onClick: function () {
+          P.checkForUpdate().then(function (r) { if (r === 'latest') UI.toast('У вас последняя версия'); else if (r === 'installing') UI.toast('Загружается новая версия…'); else if (r === 'error') UI.toast('Не удалось проверить обновления', 'error'); });
+        } }, icon('refresh', { size: 16 }), 'Проверить обновления') : null));
+
+      var local = P.localBytes();
+      var est = persistInfo.est;
+      var usage = 'Дневник: ' + P.fmtBytes(local) + (est && est.usage !== undefined ? ' · всего у сайта: ' + P.fmtBytes(est.usage) + (est.quota ? ' из ' + P.fmtBytes(est.quota) : '') : '');
+      var ptext = persistInfo.persisted === true ? 'Хранилище постоянное: браузер не удалит данные при нехватке места.'
+        : P.storageSupported() ? 'Браузер может сам очистить данные сайта при нехватке места. Постоянное хранилище просит его этого не делать (Chrome обычно разрешает установленным приложениям).'
+          : 'Этот браузер не умеет закреплять хранилище — чаще делайте экспорт JSON.';
+      card.appendChild(row('shield', 'Данные хранятся только на этом устройстве', ptext + ' ' + usage + '.',
+        P.storageSupported() && persistInfo.persisted !== true ? h('button', { type: 'button', class: 'btn soft sm', id: 'persist-btn', onClick: function () {
+          P.requestPersist().then(function (ok) {
+            persistInfo.persisted = ok === true;
+            UI.toast(ok ? 'Хранилище закреплено' : 'Браузер пока не разрешил — попробуйте после установки приложения', ok ? null : 'error');
+            draw();
+          });
+        } }, icon('shield', { size: 16 }), 'Защитить от очистки') : null));
+    }
+    function refreshAsync() {
+      Promise.all([P.persisted(), P.estimate()]).then(function (r) { persistInfo.persisted = r[0]; persistInfo.est = r[1]; if (card.isConnected) draw(); });
+    }
+    var off = P.onChange(function () { if (!card.isConnected) { off(); return; } draw(); });
+    draw(); refreshAsync();
+    return card;
+  }
 
   function importPreview(text, name, size) {
     var app = WD.app;

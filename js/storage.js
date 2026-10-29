@@ -13,7 +13,7 @@
   var TYPE_SET = { strength: 1, bodyweight: 1, assisted: 1, cardio: 1 };
 
   function defaultSettings() {
-    return { theme: 'auto', restSeconds: 90, autoRest: true, vibrate: true, beep: false, weightStep: 2.5, programStart: C.mondayOf(C.today()) };
+    return { theme: 'auto', restSeconds: 90, autoRest: true, vibrate: true, beep: false, weightStep: 2.5, wakeLock: true, programStart: C.mondayOf(C.today()) };
   }
   function defaultState() {
     return { version: VERSION, settings: defaultSettings(), program: WD.seed.defaultProgram(), sessions: [], bodyLog: [], meta: { created: Date.now(), updated: Date.now(), demo: false, welcomed: false } };
@@ -50,6 +50,7 @@
       vibrate: s.vibrate === undefined ? d.vibrate : bool(s.vibrate),
       beep: bool(s.beep),
       weightStep: steps.indexOf(s.weightStep) >= 0 ? s.weightStep : d.weightStep,
+      wakeLock: s.wakeLock === undefined ? d.wakeLock : bool(s.wakeLock),
       programStart: date(s.programStart) || d.programStart
     };
   }
@@ -210,7 +211,7 @@
 
   WD.storage = {
     VERSION: VERSION, KEY: KEY, LEGACY_KEY: LEGACY_KEY, THEME_KEY: THEME_KEY, LIMITS: LIMITS,
-    defaultState: defaultState, defaultSettings: defaultSettings, sanitizeState: sanitizeState,
+    defaultState: defaultState, defaultSettings: defaultSettings, sanitizeSettings: sanitizeSettings, sanitizeState: sanitizeState,
     sanitizeSession: sanitizeSession, sanitizeProgram: sanitizeProgram, migrate: migrate, load: load, save: save
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = WD;

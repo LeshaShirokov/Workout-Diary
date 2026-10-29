@@ -5,14 +5,23 @@
   var C = WD.core, D = WD.dom, h = D.h, icon = D.icon;
 
   var toastBox;
-  function toast(msg, kind) {
+  /** Короткое уведомление. opts: { action: {label, onClick}, sticky: true, id, icon } — возвращает элемент. */
+  function toast(msg, kind, opts) {
+    opts = opts || {};
     if (!toastBox) {
       toastBox = h('div', { class: 'toasts', role: 'status', 'aria-live': 'polite' });
       document.body.appendChild(toastBox);
     }
-    var t = h('div', { class: 'toast' + (kind ? ' ' + kind : '') }, icon(kind === 'error' ? 'info' : 'check', { size: 18 }), h('span', null, msg));
+    if (opts.id) { var old = document.getElementById(opts.id); if (old) old.remove(); }
+    var t = h('div', { class: 'toast' + (kind ? ' ' + kind : '') + (opts.action || opts.sticky ? ' interactive' : ''), id: opts.id || null },
+      icon(opts.icon || (kind === 'error' ? 'info' : 'check'), { size: 18 }), h('span', { class: 'toast-msg' }, msg));
+    function dismiss() { t.classList.add('out'); setTimeout(function () { t.remove(); }, 300); }
+    if (opts.action) t.appendChild(h('button', { type: 'button', class: 'toast-btn', onClick: function () { opts.action.onClick(); dismiss(); } }, opts.action.label));
+    if (opts.sticky) t.appendChild(h('button', { type: 'button', class: 'toast-x', 'aria-label': 'Скрыть уведомление', onClick: dismiss }, icon('x', { size: 16 })));
     toastBox.appendChild(t);
-    setTimeout(function () { t.classList.add('out'); setTimeout(function () { t.remove(); }, 300); }, 2600);
+    if (!opts.sticky) setTimeout(dismiss, opts.duration || 2600);
+    t.dismiss = dismiss;
+    return t;
   }
 
   var FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
