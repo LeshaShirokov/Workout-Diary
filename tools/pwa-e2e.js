@@ -79,9 +79,12 @@ function stopServer() { if (server) { server.kill('SIGKILL'); server = null; } r
 
   console.log('2. Офлайн');
   if (LIVE) {
-    await page.setOfflineMode(true);
     const swT = (await browser.targets()).find((t) => t.type() === 'service_worker' && t.url().startsWith(BASE));
     if (swT) { const s = await swT.createCDPSession(); await s.send('Network.enable'); await s.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); }
+    await page.setOfflineMode(true);
+    await cdp.send('Network.enable');
+    await cdp.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    ok(await page.evaluate(() => fetch('__probe__?' + Math.random(), { cache: 'no-store' }).then(() => false, () => true)), 'сеть отключена (запрос мимо кэша не проходит)');
   } else {
     await stopServer();
     ok(await page.evaluate(() => fetch('/__probe__?' + Math.random(), { cache: 'no-store' }).then(() => false, () => true)), 'сервер действительно недоступен');
@@ -89,7 +92,7 @@ function stopServer() { if (server) { server.kill('SIGKILL'); server = null; } r
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#main .page-head, #main h1', { timeout: 5000 }).catch(() => {});
   ok(await page.evaluate(() => !!document.querySelector('.tabbar') && document.querySelector('#main').textContent.length > 50), 'приложение загрузилось без сети');
-  if (LIVE) ok(await page.evaluate(() => !document.getElementById('net-badge').hidden), 'значок «Офлайн» в шапке');
+  if (LIVE) { const nb = await page.evaluate(() => ({ onLine: navigator.onLine, hidden: document.getElementById('net-badge').hidden })); ok(!nb.onLine && !nb.hidden, 'значок «Офлайн» в шапке', nb); }
   for (const r of ['journal', 'week', 'progress', 'program', 'settings', 'today']) {
     await page.evaluate((r) => { location.hash = '#/' + r; }, r); await sleep(350);
     ok(await page.evaluate((r) => WD.app.current.route === r && document.querySelector('#main').children.length > 0, r), 'офлайн-навигация: #/' + r);
@@ -132,6 +135,7 @@ function stopServer() { if (server) { server.kill('SIGKILL'); server = null; } r
 
   if (LIVE) {
     await page.setOfflineMode(false);
+    await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   } else {
     console.log('3. Обновление версии');
     await startServer();
